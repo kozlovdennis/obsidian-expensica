@@ -20,6 +20,7 @@ import { ConfirmationModal } from './confirmation-modal';
 import { showExpensicaNotice } from './notice';
 import { renderTransactionCard, showTransactionBulkCategoryMenu } from './transaction-card';
 import { renderCategoryChip } from './category-chip';
+import { showCategoryQuickMenu } from './category-quick-menu';
 
 function getAccountTransactionAmount(plugin: ExpensicaPlugin, transaction: Transaction, accountReference: string): number {
     const account = plugin.findAccountByReference(accountReference);
@@ -314,7 +315,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         if (this.plugin.settings.enableAccounts) {
             this.renderFilterMenuSection(filterMenu, 'Accounts', (submenu) => this.renderAccountFilterOptions(submenu));
         }
-        this.renderFilterMenuSection(filterMenu, 'Categories', (submenu) => this.renderCategoryFilterOptions(submenu));
+        this.renderCategoryQuickFilterSection(filterMenu);
 
         const closeMenu = () => {
             filterContainer.removeClass('is-open');
@@ -443,6 +444,37 @@ export class ExpensicaTransactionsView implements TransactionView {
                 this.toggleSelectedAccount(accountReference);
                 button.closest('.expensica-filter-menu-parent')?.removeClass('is-open');
             });
+        });
+    }
+
+    private renderCategoryQuickFilterSection(filterMenu: HTMLElement) {
+        const menuButton = filterMenu.createEl('button', {
+            cls: 'expensica-standard-button expensica-filter-menu-item',
+            attr: {
+                type: 'button',
+                'aria-label': 'Filter by categories'
+            }
+        });
+        menuButton.style.textAlign = 'left';
+        menuButton.createSpan({ text: 'Categories', cls: 'expensica-filter-menu-value' });
+
+        menuButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            showCategoryQuickMenu(
+                menuButton,
+                this.plugin,
+                CategoryType.EXPENSE,
+                (categoryId) => {
+                    this.toggleSelectedCategory(categoryId);
+                },
+                undefined,
+                {
+                    categories: this.plugin.getCategories(),
+                    selectedCategoryIds: this.selectedCategoryIds,
+                    closeOnSelect: false,
+                    preferredSide: 'left'
+                }
+            );
         });
     }
 

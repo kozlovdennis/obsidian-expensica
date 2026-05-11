@@ -6872,6 +6872,11 @@ button.expensica-category-card-search-button:active {
     color: var(--text-normal);
 }
 
+.expensica-dashboard-transactions-tab .expensica-filter-menu-title {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
 .expensica-dashboard-transactions-tab .expensica-filter-menu-item:hover {
     background-color: var(--background-modifier-hover);
 }

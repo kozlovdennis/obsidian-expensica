@@ -6,15 +6,24 @@ import { showExpensicaNotice } from './notice';
 
 let activeQuickMenu: CategoryQuickMenu | null = null;
 
+export interface CategoryQuickMenuOptions {
+    categories?: Category[];
+    selectedCategoryIds?: string[];
+    closeOnSelect?: boolean;
+    autoFocusSearch?: boolean;
+    preferredSide?: 'bottom' | 'left';
+}
+
 export function showCategoryQuickMenu(
     target: HTMLElement,
     plugin: ExpensicaPlugin,
     categoryType: CategoryType,
     onCategoryChange: (categoryId: string) => void | Promise<void>,
-    selectedCategoryId?: string
+    selectedCategoryId?: string,
+    options?: CategoryQuickMenuOptions
 ) {
     activeQuickMenu?.close();
-    activeQuickMenu = new CategoryQuickMenu(target, plugin, categoryType, onCategoryChange, selectedCategoryId);
+    activeQuickMenu = new CategoryQuickMenu(target, plugin, categoryType, onCategoryChange, selectedCategoryId, options);
     activeQuickMenu.open();
 }
 
@@ -28,28 +37,40 @@ class CategoryQuickMenu {
     private readonly onCategoryChange: (categoryId: string) => void | Promise<void>;
     private readonly selectedCategoryId?: string;
     private readonly categories: Category[];
+    private readonly closeOnSelect: boolean;
+    private readonly autoFocusSearch: boolean;
+    private readonly preferredSide: 'bottom' | 'left';
     private readonly hostEl: HTMLElement;
     private readonly boundHandleDocumentPointerDown: (event: MouseEvent) => void;
     private readonly boundHandleDocumentKeydown: (event: KeyboardEvent) => void;
+    private filteredCategories: Category[] = [];
+    private activeIndex = -1;
+    private selectedCategoryIds: Set<string>;
+    private horizontalAnchorLeft: number | null = null;
 
     constructor(
         target: HTMLElement,
         plugin: ExpensicaPlugin,
         categoryType: CategoryType,
         onCategoryChange: (categoryId: string) => void | Promise<void>,
-        selectedCategoryId?: string
+        selectedCategoryId?: string,
+        options?: CategoryQuickMenuOptions
     ) {
         this.target = target;
         this.plugin = plugin;
         this.categoryType = categoryType;
         this.onCategoryChange = onCategoryChange;
         this.selectedCategoryId = selectedCategoryId;
-        this.categories = plugin.getCategories(categoryType)
+        this.categories = (options?.categories ?? plugin.getCategories(categoryType))
             .filter(category => category.id !== INTERNAL_CATEGORY_ID)
             .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }));
+        this.closeOnSelect = options?.closeOnSelect ?? true;
+        this.autoFocusSearch = options?.autoFocusSearch ?? true;
+        this.preferredSide = options?.preferredSide ?? 'bottom';
         this.hostEl = (target.closest('.modal-content') as HTMLElement | null) || document.body;
         this.boundHandleDocumentPointerDown = this.handleDocumentPointerDown.bind(this);
         this.boundHandleDocumentKeydown = this.handleDocumentKeydown.bind(this);
+        this.selectedCategoryIds = new Set(options?.selectedCategoryIds ?? (selectedCategoryId ? [selectedCategoryId] : []));
 
         this.menuEl = document.createElement('div');
         this.menuEl.className = 'expensica-category-quick-menu';
@@ -62,11 +83,13 @@ class CategoryQuickMenu {
             attr: {
                 type: 'search',
                 placeholder: 'Search categories',
-                'aria-label': 'Search categories'
+                'aria-label': 'Search categories',
+                autocomplete: 'off'
             }
         });
 
         this.listEl = this.menuEl.createDiv('expensica-category-quick-menu-section expensica-category-quick-menu-list');
+        this.listEl.setAttribute('role', 'listbox');
 
         const footerSection = this.menuEl.createDiv('expensica-category-quick-menu-section');
         const newCategoryButton = footerSection.createEl('button', {
@@ -93,10 +116,12 @@ class CategoryQuickMenu {
         this.renderList();
         this.position();
 
-        requestAnimationFrame(() => {
-            this.searchInputEl.focus();
-            this.searchInputEl.select();
-        });
+        if (this.autoFocusSearch) {
+            requestAnimationFrame(() => {
+                this.searchInputEl.focus();
+                this.searchInputEl.select();
+            });
+        }
 
         document.addEventListener('mousedown', this.boundHandleDocumentPointerDown, true);
         document.addEventListener('keydown', this.boundHandleDocumentKeydown, true);
@@ -137,13 +162,50 @@ class CategoryQuickMenu {
     }
 
     private handleDocumentKeydown(event: KeyboardEvent) {
-        if (event.key !== 'Escape') {
+        if (!this.menuEl.isConnected) {
             return;
         }
 
-        event.preventDefault();
-        event.stopPropagation();
-        this.close();
+        const eventTarget = event.target as Node | null;
+        const activeElement = document.activeElement;
+        const isWithinMenu = !!eventTarget && this.menuEl.contains(eventTarget);
+        const isSearchFocused = activeElement === this.searchInputEl;
+
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.close();
+            return;
+        }
+
+        if (!isWithinMenu && !isSearchFocused) {
+            return;
+        }
+
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.moveActiveIndex(1);
+            return;
+        }
+
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.moveActiveIndex(-1);
+            return;
+        }
+
+        if (event.key === 'Enter' && activeElement === this.searchInputEl) {
+            const activeCategory = this.filteredCategories[this.activeIndex];
+            if (!activeCategory) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            this.selectCategory(activeCategory.id);
+        }
     }
 
     private position() {
@@ -162,14 +224,38 @@ class CategoryQuickMenu {
         const availableAbove = rect.top - viewportPadding - spacing;
         const listMaxHeight = Math.max(80, Math.min(maxVisibleListHeight, Math.max(availableBelow, availableAbove) - menuChromeHeight));
         const expectedMenuHeight = menuChromeHeight + listMaxHeight;
-        const left = Math.min(
-            Math.max(viewportPadding, rect.left),
-            Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
-        );
-        const shouldOpenAbove = availableBelow < expectedMenuHeight && availableAbove > availableBelow;
-        const top = shouldOpenAbove
-            ? Math.max(viewportPadding, rect.top - Math.min(expectedMenuHeight, rect.top - viewportPadding) - spacing)
-            : Math.min(window.innerHeight - viewportPadding - Math.min(expectedMenuHeight, availableBelow + menuChromeHeight), rect.bottom + spacing);
+        let left: number;
+        let top: number;
+
+        if (this.preferredSide === 'left') {
+            if (this.horizontalAnchorLeft === null) {
+                const preferredLeft = rect.left - menuWidth - spacing;
+                const fallbackLeft = rect.right + spacing;
+                this.horizontalAnchorLeft = preferredLeft >= viewportPadding
+                    ? preferredLeft
+                    : Math.min(
+                        Math.max(viewportPadding, fallbackLeft),
+                        Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
+                    );
+            }
+            left = Math.min(
+                Math.max(viewportPadding, this.horizontalAnchorLeft),
+                Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
+            );
+            top = Math.min(
+                Math.max(viewportPadding, rect.top),
+                Math.max(viewportPadding, window.innerHeight - expectedMenuHeight - viewportPadding)
+            );
+        } else {
+            left = Math.min(
+                Math.max(viewportPadding, rect.left),
+                Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
+            );
+            const shouldOpenAbove = availableBelow < expectedMenuHeight && availableAbove > availableBelow;
+            top = shouldOpenAbove
+                ? Math.max(viewportPadding, rect.top - Math.min(expectedMenuHeight, rect.top - viewportPadding) - spacing)
+                : Math.min(window.innerHeight - viewportPadding - Math.min(expectedMenuHeight, availableBelow + menuChromeHeight), rect.bottom + spacing);
+        }
 
         this.menuEl.style.width = `${menuWidth}px`;
         this.menuEl.style.maxHeight = `${Math.max(140, window.innerHeight - (viewportPadding * 2))}px`;
@@ -182,13 +268,24 @@ class CategoryQuickMenu {
         this.listEl.empty();
 
         const normalizedSearch = searchTerm.trim().toLowerCase();
-        const filteredCategories = this.categories.filter(category =>
+        this.filteredCategories = this.categories.filter(category =>
             !normalizedSearch
             || category.name.toLowerCase().includes(normalizedSearch)
             || this.plugin.getCategoryEmoji(category.id).includes(normalizedSearch)
         );
 
-        if (filteredCategories.length === 0) {
+        if (this.filteredCategories.length > 0) {
+            const selectedIndex = this.filteredCategories.findIndex(category => category.id === this.selectedCategoryId);
+            if (selectedIndex >= 0 && (this.activeIndex < 0 || this.activeIndex >= this.filteredCategories.length || normalizedSearch)) {
+                this.activeIndex = selectedIndex;
+            } else if (this.activeIndex < 0 || this.activeIndex >= this.filteredCategories.length || normalizedSearch) {
+                this.activeIndex = 0;
+            }
+        } else {
+            this.activeIndex = -1;
+        }
+
+        if (this.filteredCategories.length === 0) {
             this.listEl.createDiv({
                 text: 'No categories found',
                 cls: 'expensica-category-quick-menu-empty'
@@ -196,16 +293,19 @@ class CategoryQuickMenu {
             return;
         }
 
-        filteredCategories.forEach(category => {
+        this.filteredCategories.forEach((category, index) => {
+            const isSelected = this.selectedCategoryIds.has(category.id) || category.id === this.selectedCategoryId;
             const optionButton = this.listEl.createEl('button', {
                 cls: 'expensica-category-quick-menu-item',
                 attr: {
                     type: 'button',
-                    'aria-pressed': String(category.id === this.selectedCategoryId)
+                    role: 'option',
+                    'aria-pressed': String(isSelected),
+                    'aria-selected': String(index === this.activeIndex)
                 }
             });
 
-            if (category.id === this.selectedCategoryId) {
+            if (isSelected || index === this.activeIndex) {
                 optionButton.addClass('is-selected');
             }
 
@@ -219,9 +319,57 @@ class CategoryQuickMenu {
             });
 
             optionButton.addEventListener('click', () => {
-                this.close();
-                void this.onCategoryChange(category.id);
+                this.selectCategory(category.id);
             });
+        });
+
+        this.ensureActiveItemVisible();
+    }
+
+    private moveActiveIndex(direction: 1 | -1) {
+        if (this.filteredCategories.length === 0) {
+            this.activeIndex = -1;
+            return;
+        }
+
+        if (this.activeIndex < 0) {
+            this.activeIndex = direction > 0 ? 0 : this.filteredCategories.length - 1;
+        } else {
+            this.activeIndex = (this.activeIndex + direction + this.filteredCategories.length) % this.filteredCategories.length;
+        }
+
+        this.renderList(this.searchInputEl.value);
+    }
+
+    private ensureActiveItemVisible() {
+        if (this.activeIndex < 0) {
+            return;
+        }
+
+        const activeOption = this.listEl.children.item(this.activeIndex) as HTMLElement | null;
+        activeOption?.scrollIntoView({ block: 'nearest' });
+    }
+
+    private selectCategory(categoryId: string) {
+        if (this.closeOnSelect) {
+            this.close();
+            void this.onCategoryChange(categoryId);
+            return;
+        }
+
+        if (this.selectedCategoryIds.has(categoryId)) {
+            this.selectedCategoryIds.delete(categoryId);
+        } else {
+            this.selectedCategoryIds.add(categoryId);
+        }
+
+        void Promise.resolve(this.onCategoryChange(categoryId)).finally(() => {
+            if (!this.menuEl.isConnected) {
+                return;
+            }
+
+            this.renderList(this.searchInputEl.value);
+            this.searchInputEl.focus();
         });
     }
 }
