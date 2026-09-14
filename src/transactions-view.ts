@@ -942,13 +942,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         
         // Get current page transactions
         const pageTransactions = this.filteredTransactions.slice(startIdx, endIdx);
-        const runningBalances = getRunningBalanceByTransactionIdForAccount(
-            this.plugin,
-            this.plugin.normalizeTransactionAccountReference(undefined),
-            this.transactions
-        );
-        
-        this.renderTransactionsToContainer(transactionsContainer, pageTransactions, runningBalances);
+        this.renderTransactionsToContainer(transactionsContainer, pageTransactions);
         this.renderBulkSelectionFooter(transactionsSection);
     }
 
