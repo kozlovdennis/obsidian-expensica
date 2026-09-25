@@ -3136,6 +3136,9 @@ export class ExpensicaDashboardView extends ItemView {
         const balance = this.getDefaultAccountBalanceThrough(this.dateRange.endDate);
 
         const comparison = this.getPreviousPeriodComparisonRange();
+        const comparisonLabel = comparison
+            ? this.getResolvedDateRangeLegendLabel(comparison.range, comparison.label, 'short')
+            : '';
         const comparisonTransactions = comparison ? this.getTransactionsForDateRange(comparison.range) : [];
         const prevTotalIncome = TransactionAggregator.getTotalIncome(comparisonTransactions);
         const prevTotalExpenses = TransactionAggregator.getTotalExpenses(comparisonTransactions);
@@ -3153,7 +3156,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         if (comparison) {
             const trendEl = incomeCard.createEl('div', { cls: 'expensica-card-trend' });
-            trendEl.innerHTML = getTrendMarkup(incomeTrend, comparison.label, totalIncome >= prevTotalIncome);
+            trendEl.innerHTML = getTrendMarkup(incomeTrend, comparisonLabel, totalIncome >= prevTotalIncome);
         }
 
 
@@ -3165,7 +3168,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         if (comparison) {
             const trendEl = expensesCard.createEl('div', { cls: 'expensica-card-trend' });
-            trendEl.innerHTML = getTrendMarkup(expenseTrend, comparison.label, totalExpenses <= prevTotalExpenses);
+            trendEl.innerHTML = getTrendMarkup(expenseTrend, comparisonLabel, totalExpenses <= prevTotalExpenses);
         }
 
 
@@ -3177,7 +3180,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         if (comparison) {
             const trendEl = netBalanceCard.createEl('div', { cls: 'expensica-card-trend' });
-            trendEl.innerHTML = getTrendMarkup(netBalanceTrend, comparison.label, netBalance >= prevNetBalance);
+            trendEl.innerHTML = getTrendMarkup(netBalanceTrend, comparisonLabel, netBalance >= prevNetBalance);
         }
 
         const balanceAccounts = this.plugin.settings.enableAccounts
@@ -3223,7 +3226,7 @@ export class ExpensicaDashboardView extends ItemView {
                 const isPositiveNews = account.type === AccountType.CREDIT
                     ? normalizedAccountBalance <= prevAccountBalance
                     : normalizedAccountBalance >= prevAccountBalance;
-                trendEl.innerHTML = getTrendMarkup(accountBalanceTrend, comparison.label, isPositiveNews);
+                trendEl.innerHTML = getTrendMarkup(accountBalanceTrend, comparisonLabel, isPositiveNews);
             }
         });
 
@@ -3942,7 +3945,7 @@ export class ExpensicaDashboardView extends ItemView {
         }
     }
 
-    private getResolvedDateRangeLegendLabel(dateRange?: DateRange, fallbackLabel?: string): string {
+    private getResolvedDateRangeLegendLabel(dateRange?: DateRange, fallbackLabel?: string, monthFormat: 'long' | 'short' = 'long'): string {
         if (!dateRange) {
             return fallbackLabel ?? '';
         }
@@ -3972,7 +3975,7 @@ export class ExpensicaDashboardView extends ItemView {
         if (isSingleDay) {
             return start.toLocaleDateString(undefined, {
                 weekday: 'long',
-                month: 'long',
+                month: monthFormat,
                 day: 'numeric',
                 ...(includeYear ? { year: 'numeric' } : {})
             });
@@ -3983,7 +3986,7 @@ export class ExpensicaDashboardView extends ItemView {
         }
 
         if (isFullMonth) {
-            return `${start.toLocaleDateString(undefined, { month: 'long' })}, ${start.getFullYear()}`;
+            return `${start.toLocaleDateString(undefined, { month: monthFormat })}, ${start.getFullYear()}`;
         }
 
         if (isFullYear) {
@@ -3998,7 +4001,7 @@ export class ExpensicaDashboardView extends ItemView {
             }
             case DateRangeType.THIS_MONTH:
             case DateRangeType.LAST_MONTH:
-                return `${start.toLocaleDateString(undefined, { month: 'long' })}, ${start.getFullYear()}`;
+                return `${start.toLocaleDateString(undefined, { month: monthFormat })}, ${start.getFullYear()}`;
             case DateRangeType.THIS_YEAR:
             case DateRangeType.LAST_YEAR:
                 return String(start.getFullYear());

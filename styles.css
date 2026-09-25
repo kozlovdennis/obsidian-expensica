@@ -359,7 +359,7 @@
 /* Summary Cards */
 .expensica-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--expensica-summary-card-min-width, min(100%, 250px)), 1fr));
   gap: var(--expensica-gap-lg);
   margin-bottom: 0;
 }
@@ -3107,14 +3107,6 @@ to {
   
   .expensica-export-modal .expensica-btn {
     width: 100%;
-  }
-}
-
-/* Responsive adjustments */
-@media screen and (max-width: 1024px) {
-  .expensica-summary {
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 12px;
   }
 }
 
@@ -8738,8 +8730,11 @@ button.expensica-standard-button:focus-visible,
 }
 
 .expensica-dashboard > .expensica-overview-summary.expensica-summary {
+  /* One shared card minimum on desktop, phones, and tablets; available space sets the column count. */
+  --expensica-summary-card-min-width: 140px;
+  box-sizing: border-box;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
   gap: var(--expensica-gap-md);
 }
 
@@ -8750,9 +8745,10 @@ button.expensica-standard-button:focus-visible,
 }
 
 .expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card {
+  box-sizing: border-box;
   height: auto;
   min-height: min-content;
-  min-width: 0;
+  min-width: var(--expensica-summary-card-min-width);
   padding: var(--expensica-gap-md);
 }
 
@@ -8762,14 +8758,6 @@ button.expensica-standard-button:focus-visible,
   min-height: min-content;
   min-width: max-content;
   padding: var(--expensica-gap-md);
-}
-
-.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card-primary {
-  grid-row: 1;
-}
-
-.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card-balance {
-  grid-row: 2;
 }
 
 .expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title,
@@ -8852,19 +8840,13 @@ button.expensica-standard-button:focus-visible,
   z-index: 1;
 }
 
-@media (max-width: 1100px) {
-  .expensica-dashboard > .expensica-overview-summary.expensica-summary {
-    grid-template-columns: repeat(2, minmax(max-content, 1fr));
-  }
-
-  .expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card-primary,
-  .expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card-balance {
-    grid-row: auto;
-  }
-
-  .expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card {
-    min-width: max-content;
-  }
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title,
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-value,
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-trend {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  overflow: hidden;
+  text-overflow: clip;
 }
 
 .expensica-modal .expensica-category-name-row > .expensica-category-picker-trigger,
